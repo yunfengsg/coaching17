@@ -1,5 +1,5 @@
 provider "aws" {
-  region = "ap-southeast-1"
+  region = "ap-southeast-1"  # Change to your desired region
 }
 
 terraform {
@@ -13,14 +13,18 @@ terraform {
   }
 }
 
+# Define local variables
 locals {
-  prefix = "your-prefix-value"  # Replace with your desired prefix
+  prefix = "yyf-app"  # Replace with your desired prefix
 }
 
+# Fetch current AWS account ID
 data "aws_caller_identity" "current" {}
 
+# Fetch current AWS region
 data "aws_region" "current" {}
 
+# Create an ECR repository
 resource "aws_ecr_repository" "ecr" {
   name                 = "${local.prefix}-ecr"
   force_delete         = true
@@ -37,11 +41,35 @@ resource "aws_ecr_repository" "ecr" {
   }
 }
 
+# Create a security group for the ECS service
+resource "aws_security_group" "ecs_service" {
+  name        = "${local.prefix}-ecs-service-sg"
+  description = "Security group for ECS service"
+  vpc_id      = "vpc-0916e29d8add9bb15"  # Replace with your VPC ID
+
+  ingress {
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]  # Allow traffic from anywhere (adjust as needed)
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]  # Allow all outbound traffic
+  }
+}
+
+# Create the ECS cluster and service
 module "ecs" {
   source  = "terraform-aws-modules/ecs/aws"
   version = "~> 5.9.0"
 
   cluster_name = "${local.prefix}-ecs"
+
+  # Configure Fargate capacity provider
   fargate_capacity_providers = {
     FARGATE = {
       default_capacity_provider_strategy = {
@@ -50,13 +78,16 @@ module "ecs" {
     }
   }
 
+  # Define the ECS service
   services = {
-    yyf-coaching17-task = {
+    my-app-task = {  # Task definition and service name
       cpu    = 512
       memory = 1024
+
+      # Container definition
       container_definitions = jsonencode([
         {
-          name      = "yyf-coaching17-container"
+          name      = "my-app-container"  # Container name
           essential = true
           image     = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com/${local.prefix}-ecr:latest"
           portMappings = [
@@ -67,10 +98,20 @@ module "ecs" {
           ]
         }
       ])
+
       assign_public_ip                   = true
       deployment_minimum_healthy_percent = 100
-      subnet_ids                         = ["subnet-0bbee1ca446e01642"] # Use quotes for strings
-      security_group_ids                 = ["sg-09662e0e5a3857a26"]    # Use quotes for strings
+
+      # Subnet IDs (replace with your subnet IDs)
+      subnet_ids = [
+        "subnet-0bbee1ca446e01642",  # Replace with your subnet ID
+        "subnet-0bbee1ca446e01643"   # Replace with your subnet ID
+      ]
+
+      # Security group IDs (use the one created above)
+      security_group_ids = [
+        aws_security_group.ecs_service.id
+      ]
     }
   }
 }
