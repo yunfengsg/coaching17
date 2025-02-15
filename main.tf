@@ -14,7 +14,7 @@ terraform {
 }
 
 locals {
-  prefix = "yyf"  # Replace with your desired prefix
+  prefix = "your-prefix-value"  # Replace with your desired prefix
 }
 
 data "aws_caller_identity" "current" {}
@@ -22,8 +22,19 @@ data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
 resource "aws_ecr_repository" "ecr" {
-  name         = "${local.prefix}-ecr"
-  force_delete = true
+  name                 = "${local.prefix}-ecr"
+  force_delete         = true
+
+  # Enable encryption for the ECR repository
+  encryption_configuration {
+    encryption_type = "KMS"  # Use AWS KMS for encryption
+    # kms_key        = "arn:aws:kms:ap-southeast-1:123456789012:key/your-kms-key-id"  # Optional: Specify a custom KMS key ARN
+  }
+
+  # Enable image scanning on push
+  image_scanning_configuration {
+    scan_on_push = true
+  }
 }
 
 module "ecs" {
